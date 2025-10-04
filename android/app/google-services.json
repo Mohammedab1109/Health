@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "613646983899",
+    "project_id": "health-d89a6",
+    "storage_bucket": "health-d89a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:613646983899:android:4f0962580cc749670322fe",
+        "android_client_info": {
+          "package_name": "com.technion.android.health"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7mlLaQqIjoNE_asApl3cYb461QoYX9Us"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
