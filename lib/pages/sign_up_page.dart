@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:health/services/auth_service.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -16,9 +16,15 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _adminCodeController = TextEditingController();
   String _selectedGender = 'Male';
+  String _selectedRole = AuthService.ROLE_USER;
   bool _isLoading = false;
   String _errorMessage = '';
+
+  // Admin registration code - in a real application, this would be managed securely
+  // and not hard-coded in the app
+  final String _adminRegistrationCode = "ADMIN123";
 
   final List<String> _genders = ['Male', 'Female', 'Other'];
 
@@ -29,6 +35,7 @@ class _SignUpPageState extends State<SignUpPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _adminCodeController.dispose();
     super.dispose();
   }
 
@@ -40,27 +47,25 @@ class _SignUpPageState extends State<SignUpPage> {
       });
 
       try {
-        // Create the user account
-        final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        // Verify admin code if admin role is selected
+        if (_selectedRole == AuthService.ROLE_ADMIN && 
+            _adminCodeController.text.trim() != _adminRegistrationCode) {
+          setState(() {
+            _errorMessage = 'Invalid admin code';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Create user with the AuthService
+        await AuthService.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
+          gender: _selectedGender,
+          role: _selectedRole,
         );
-
-        // Combine first and last name
-        final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
-
-        // Add user details to Firestore
-        await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-          'firstName': _firstNameController.text.trim(),
-          'lastName': _lastNameController.text.trim(),
-          'fullName': fullName,
-          'email': _emailController.text.trim(),
-          'gender': _selectedGender,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        // Update user display name
-        await userCredential.user!.updateDisplayName(fullName);
 
         // Pop back to sign in screen (main.dart will handle navigation if user is authenticated)
         if (mounted) {
@@ -312,6 +317,101 @@ class _SignUpPageState extends State<SignUpPage> {
                           },
                         ),
                         const SizedBox(height: 15),
+                        
+                        // Role selection
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(left: 12, bottom: 5),
+                              child: Text(
+                                'Account Type',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: const Text('User'),
+                                    selected: _selectedRole == AuthService.ROLE_USER,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        setState(() {
+                                          _selectedRole = AuthService.ROLE_USER;
+                                        });
+                                      }
+                                    },
+                                    backgroundColor: Colors.grey[200],
+                                    selectedColor: const Color(0xFF1A3A6B).withOpacity(0.2),
+                                    labelStyle: TextStyle(
+                                      color: _selectedRole == AuthService.ROLE_USER
+                                          ? const Color(0xFF1A3A6B)
+                                          : Colors.black,
+                                      fontWeight: _selectedRole == AuthService.ROLE_USER
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: const Text('Admin'),
+                                    selected: _selectedRole == AuthService.ROLE_ADMIN,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        setState(() {
+                                          _selectedRole = AuthService.ROLE_ADMIN;
+                                        });
+                                      }
+                                    },
+                                    backgroundColor: Colors.grey[200],
+                                    selectedColor: const Color(0xFF1A3A6B).withOpacity(0.2),
+                                    labelStyle: TextStyle(
+                                      color: _selectedRole == AuthService.ROLE_ADMIN
+                                          ? const Color(0xFF1A3A6B)
+                                          : Colors.black,
+                                      fontWeight: _selectedRole == AuthService.ROLE_ADMIN
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 15),
+                        
+                        // Admin code field (only visible if admin role is selected)
+                        if (_selectedRole == AuthService.ROLE_ADMIN)
+                          TextFormField(
+                            controller: _adminCodeController,
+                            decoration: InputDecoration(
+                              hintText: 'Admin Registration Code',
+                              prefixIcon: const Icon(Icons.admin_panel_settings, color: Color(0xFF1A3A6B)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[200],
+                            ),
+                            validator: (value) {
+                              if (_selectedRole == AuthService.ROLE_ADMIN) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter admin code';
+                                }
+                              }
+                              return null;
+                            },
+                          ),
+                        if (_selectedRole == AuthService.ROLE_ADMIN) 
+                          const SizedBox(height: 15),
                         
                         // Error message
                         if (_errorMessage.isNotEmpty)

@@ -7,7 +7,7 @@ class AppColors {
   static const Color energeticOrange = Color(0xFFFF9F1C);
   
   // Supporting colors
-  static const Color lightMint = Color(0xFFE4F9F5);
+  static const Color lightMint = Color(0xFFBCE8E3); // Darkened from 0xFFE4F9F5
   static const Color softWhite = Color(0xFFF7F9FB);
   static const Color lightGray = Color(0xFFE8ECF2);
   static const Color darkGray = Color(0xFF4A5568);

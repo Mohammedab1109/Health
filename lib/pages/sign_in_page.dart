@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/pages/sign_up_page.dart';
+import 'package:health/services/auth_service.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -15,6 +17,7 @@ class _SignInPageState extends State<SignInPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String _errorMessage = '';
+  String _selectedRole = AuthService.ROLE_USER;
 
   @override
   void dispose() {
@@ -31,16 +34,54 @@ class _SignInPageState extends State<SignInPage> {
       });
 
       try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        // Sign in with email and password
+        final userCredential = await AuthService.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+        
+        // Verify the user's role if they selected admin
+        if (_selectedRole == AuthService.ROLE_ADMIN) {
+          try {
+            final doc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userCredential.user!.uid)
+                .get();
+            
+            // Check if the user is actually an admin
+            if (!doc.exists || doc.data()?['role'] != AuthService.ROLE_ADMIN) {
+              // Sign out the user if they're not an admin
+              await FirebaseAuth.instance.signOut();
+              if (mounted) {
+                setState(() {
+                  _errorMessage = 'You are not authorized as an admin';
+                  _isLoading = false;
+                });
+              }
+              return;
+            }
+          } catch (e) {
+            print('Error checking admin role: $e');
+            // Sign out on error to be safe
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Error verifying account type. Please try again.';
+                _isLoading = false;
+              });
+            }
+            return;
+          }
+        }
+        
         // No need to navigate - main.dart will handle this when auth state changes
       } on FirebaseAuthException catch (e) {
+        print('FirebaseAuthException during sign in: ${e.message}');
         setState(() {
           _errorMessage = e.message ?? 'An error occurred during sign in';
         });
       } catch (e) {
+        print('Unexpected error during sign in: $e');
         setState(() {
           _errorMessage = 'An unexpected error occurred';
         });
@@ -170,6 +211,58 @@ class _SignInPageState extends State<SignInPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        // Role selection
+                        Row(
+                          children: [
+                            const Text('Sign in as:'),
+                            const Spacer(),
+                            ChoiceChip(
+                              label: const Text('User'),
+                              selected: _selectedRole == AuthService.ROLE_USER,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedRole = AuthService.ROLE_USER;
+                                  });
+                                }
+                              },
+                              backgroundColor: Colors.grey[200],
+                              selectedColor: const Color(0xFF1A3A6B).withOpacity(0.2),
+                              labelStyle: TextStyle(
+                                color: _selectedRole == AuthService.ROLE_USER 
+                                    ? const Color(0xFF1A3A6B) 
+                                    : Colors.black,
+                                fontWeight: _selectedRole == AuthService.ROLE_USER
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            ChoiceChip(
+                              label: const Text('Admin'),
+                              selected: _selectedRole == AuthService.ROLE_ADMIN,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedRole = AuthService.ROLE_ADMIN;
+                                  });
+                                }
+                              },
+                              backgroundColor: Colors.grey[200],
+                              selectedColor: const Color(0xFF1A3A6B).withOpacity(0.2),
+                              labelStyle: TextStyle(
+                                color: _selectedRole == AuthService.ROLE_ADMIN 
+                                    ? const Color(0xFF1A3A6B) 
+                                    : Colors.black,
+                                fontWeight: _selectedRole == AuthService.ROLE_ADMIN
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         
