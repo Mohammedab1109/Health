@@ -6,6 +6,7 @@ import 'package:health/theme/app_theme.dart';
 import 'package:health/pages/create_event_page.dart';
 import 'package:health/pages/event_list_page.dart';
 import 'package:health/pages/test_image_upload_page.dart';
+import 'package:health/pages/pose_detection_screen.dart';
 
 class MainLayout extends StatefulWidget {
   final int initialPageIndex;
@@ -30,8 +31,7 @@ class _MainLayoutState extends State<MainLayout> {
     _pages = [
       const HomePage(),
       const EventListPage(),
-      // Placeholder for Community page
-      const Center(child: Text('Community Coming Soon')),
+      const PoseDetectionScreen(), // ML-based pose detection and analysis
       const ProfilePage(),
     ];
   }
@@ -98,8 +98,8 @@ class _MainLayoutState extends State<MainLayout> {
             label: 'Events',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.group),
-            label: 'Community',
+            icon: Icon(Icons.camera),
+            label: 'Analysis',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
