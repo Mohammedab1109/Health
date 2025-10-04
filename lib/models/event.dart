@@ -10,6 +10,7 @@ class Event {
   final bool isFormal;  // True for admin events (formal), false for regular user events
   final String? sponsorship;  // Only for formal events
   final List<String> participants;
+  final String? imageUrl;  // Cloudinary image URL
 
   Event({
     required this.id,
@@ -21,6 +22,7 @@ class Event {
     required this.isFormal,
     this.sponsorship,
     this.participants = const [],
+    this.imageUrl,
   });
 
   // Convert Event to Map for Firestore
@@ -34,6 +36,7 @@ class Event {
       'isFormal': isFormal,
       'sponsorship': sponsorship,
       'participants': participants,
+      'imageUrl': imageUrl,
     };
   }
 
@@ -49,6 +52,7 @@ class Event {
       isFormal: map['isFormal'] ?? false,
       sponsorship: map['sponsorship'],
       participants: List<String>.from(map['participants'] ?? []),
+      imageUrl: map['imageUrl'],
     );
   }
 }

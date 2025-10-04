@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:health/pages/home_page.dart';
 import 'package:health/pages/profile_page.dart';
+import 'package:health/pages/edit_profile_page.dart';
 import 'package:health/theme/app_theme.dart';
+import 'package:health/pages/create_event_page.dart';
+import 'package:health/pages/event_list_page.dart';
+import 'package:health/pages/test_image_upload_page.dart';
 
 class MainLayout extends StatefulWidget {
   final int initialPageIndex;
@@ -25,8 +29,7 @@ class _MainLayoutState extends State<MainLayout> {
     _currentIndex = widget.initialPageIndex;
     _pages = [
       const HomePage(),
-      // Placeholder for Events page
-      const Center(child: Text('Events Coming Soon')),
+      const EventListPage(),
       // Placeholder for Community page
       const Center(child: Text('Community Coming Soon')),
       const ProfilePage(),
@@ -40,6 +43,41 @@ class _MainLayoutState extends State<MainLayout> {
         index: _currentIndex,
         children: _pages,
       ),
+      appBar: _currentIndex == 3 ? AppBar(
+        title: const Text('Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit Profile',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EditProfilePage(),
+                ),
+              ).then((_) {
+                // Refresh profile page when returning from edit page
+                setState(() {
+                  _pages[3] = const ProfilePage();
+                });
+              });
+            },
+          ),
+          // Keep test button for development
+          IconButton(
+            icon: const Icon(Icons.science),
+            tooltip: 'Test Image Upload',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TestImageUploadPage(),
+                ),
+              );
+            },
+          ),
+        ],
+      ) : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -69,6 +107,18 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ],
       ),
+      floatingActionButton: _currentIndex == 1 ? FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateEventPage(isAdmin: false),
+            ),
+          );
+        },
+        backgroundColor: AppColors.vibrantTeal,
+        child: const Icon(Icons.add),
+      ) : null,
     );
   }
 }

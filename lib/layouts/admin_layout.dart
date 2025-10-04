@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:health/services/auth_service.dart';
 import 'package:health/pages/admin_home_page.dart';
 import 'package:health/pages/admin_profile_page.dart';
+import 'package:health/pages/create_event_page.dart';
 
 class AdminLayout extends StatefulWidget {
   const AdminLayout({super.key});
@@ -62,9 +63,11 @@ class _AdminLayoutState extends State<AdminLayout> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navigation to create formal event page
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Create formal event feature coming soon!')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateEventPage(isAdmin: true),
+            ),
           );
         },
         backgroundColor: const Color(0xFF1A3A6B),

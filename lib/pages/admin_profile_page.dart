@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/services/auth_service.dart';
 import 'package:health/theme/app_theme.dart';
+import 'package:health/pages/edit_profile_page.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class AdminProfilePage extends StatefulWidget {
   const AdminProfilePage({super.key});
@@ -63,17 +65,18 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : _errorMessage.isNotEmpty
-            ? Center(child: Text(_errorMessage, style: const TextStyle(color: AppColors.errorRed)))
-            : _buildProfileContent();
-  }
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-  Widget _buildProfileContent() {
+    if (_errorMessage.isNotEmpty) {
+      return Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red)));
+    }
+
     final firstName = _userData?['firstName'] ?? '';
     final lastName = _userData?['lastName'] ?? '';
-    final fullName = _userData?['fullName'] ?? 'User';
+    final fullName = '$firstName $lastName';
+    final email = _userData?['email'] ?? '';
     final gender = _userData?['gender'] ?? '';
     final role = _userData?['role'] ?? 'user';
     
@@ -88,18 +91,82 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Profile Header
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppColors.primaryBlue,
-              child: Text(
-                fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
-                style: const TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+            // Edit Profile Button
+            Align(
+              alignment: Alignment.topRight,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final updated = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditProfilePage(),
+                    ),
+                  );
+                  
+                  // Reload user data if profile was updated
+                  if (updated == true) {
+                    _loadUserData();
+                  }
+                },
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Profile'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
                 ),
               ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Profile Header
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  radius: 50,
+                  backgroundColor: AppColors.primaryBlue,
+                  backgroundImage: _userData?['profileImageUrl'] != null && _userData!['profileImageUrl'].isNotEmpty
+                      ? CachedNetworkImageProvider(_userData!['profileImageUrl'])
+                      : null,
+                  child: _userData?['profileImageUrl'] == null || _userData!['profileImageUrl'].isEmpty
+                      ? Text(
+                          fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
+                          style: const TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        )
+                      : null,
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    final updated = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EditProfilePage(),
+                      ),
+                    );
+                    
+                    // Reload user data if profile was updated
+                    if (updated == true) {
+                      _loadUserData();
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      color: AppColors.vibrantTeal,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.edit,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Text(
@@ -110,11 +177,19 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
               ),
             ),
             const SizedBox(height: 4),
+            Text(
+              email,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: role == 'admin' ? Colors.orange[100] : AppColors.primaryBlue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
+                color: role == 'admin' ? Colors.orange[100] : AppColors.primaryBlue.withOpacity(0.1),
               ),
               child: Text(
                 role == 'admin' ? 'Admin' : 'User',
@@ -126,46 +201,44 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
             ),
             const SizedBox(height: 24),
             
-            // Basic Info Card
-            _buildInfoCard(
-              'Basic Information',
-              [
-                _buildInfoRow('First Name', firstName),
-                _buildInfoRow('Last Name', lastName),
-                _buildInfoRow('Gender', gender),
-              ],
-              Icons.person,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Fitness Profile Card
-            _buildInfoCard(
-              'Fitness Profile',
-              [
-                _buildInfoRow('Height', '$height cm'),
-                _buildInfoRow('Weight', '$weight kg'),
-                _buildInfoRow('Fitness Level', fitnessLevel),
-              ],
-              Icons.fitness_center,
-            ),
+            // Admin Stats
+            _buildStatsCard(),
             
             const SizedBox(height: 24),
             
-            // Sign Out Button
+            // Logout Button
             ElevatedButton.icon(
               onPressed: () async {
-                await AuthService.signOut();
+                // Show confirmation dialog
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Confirm Logout'),
+                    content: const Text('Are you sure you want to log out?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Logout'),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (confirmed == true) {
+                  await AuthService.signOut();
+                  // No need to navigate - main.dart will handle this when auth state changes
+                }
               },
               icon: const Icon(Icons.logout),
-              label: const Text('Sign Out'),
+              label: const Text('Logout'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
               ),
             ),
           ],
@@ -173,65 +246,78 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
       ),
     );
   }
-
-  Widget _buildInfoCard(String title, List<Widget> rows, IconData icon) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
+  
+  Widget _buildStatsCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.primaryBlue),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryBlue,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                child: Text(
+                  'Admin Dashboard',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ],
-          ),
-          const Divider(height: 24),
-          ...rows,
-        ],
+            ),
+            const SizedBox(height: 16),
+            _buildStatItem(
+              icon: Icons.people,
+              title: 'Users Managed',
+              value: '142',
+            ),
+            _buildStatItem(
+              icon: Icons.event,
+              title: 'Events Created',
+              value: '24',
+            ),
+            _buildStatItem(
+              icon: Icons.star,
+              title: 'Average Rating',
+              value: '4.8/5',
+            ),
+          ],
+        ),
       ),
     );
   }
-
-  Widget _buildInfoRow(String label, String value) {
+  
+  Widget _buildStatItem({required IconData icon, required String title, required String value}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Icon(icon, color: Colors.grey),
+          const SizedBox(width: 12),
           Text(
-            label,
+            title,
             style: const TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ),
+          const Spacer(),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryBlue,
             ),
           ),
         ],

@@ -90,6 +90,7 @@ class AuthService {
           'email': email,
           'gender': gender,
           'role': role,
+          'profileImageUrl': '', // Initialize empty profileImageUrl field
           'createdAt': FieldValue.serverTimestamp(),
         });
         
@@ -112,5 +113,83 @@ class AuthService {
     }
     
     return userCredential;
+  }
+  
+  // Get current user data from Firestore
+  static Future<Map<String, dynamic>?> getUserData() async {
+    if (currentUser == null) {
+      return null;
+    }
+    
+    try {
+      final docSnapshot = await _firestore.collection('users').doc(currentUser!.uid).get();
+      if (docSnapshot.exists) {
+        return docSnapshot.data();
+      }
+      return null;
+    } catch (e) {
+      print('Error getting user data: $e');
+      return null;
+    }
+  }
+
+  // Update user profile
+  static Future<void> updateUserProfile({
+    Map<String, dynamic>? data,
+    String? profileImageUrl,
+  }) async {
+    if (currentUser == null) {
+      throw Exception('User must be signed in to update profile');
+    }
+    
+    try {
+      final userRef = _firestore.collection('users').doc(currentUser!.uid);
+      
+      // Prepare update data
+      final Map<String, dynamic> updateData = {};
+      
+      // Add regular data if provided
+      if (data != null && data.isNotEmpty) {
+        updateData.addAll(data);
+      }
+      
+      // Add profile image URL if provided
+      if (profileImageUrl != null) {
+        updateData['profileImageUrl'] = profileImageUrl;
+        print('Adding profileImageUrl to update data: $profileImageUrl');
+        
+        // Try to update just the profile image URL first to ensure it's saved
+        try {
+          await userRef.update({'profileImageUrl': profileImageUrl});
+          print('✅ Profile image URL updated successfully');
+        } catch (e) {
+          print('❌ Error updating profile image URL: $e');
+          // Continue with the rest of the updates
+        }
+      }
+      
+      // Add timestamp for tracking updates
+      updateData['updatedAt'] = FieldValue.serverTimestamp();
+      
+      // Update the user document
+      if (updateData.isNotEmpty) {
+        print('Updating user document with data: $updateData');
+        await userRef.update(updateData);
+        print('User profile updated successfully');
+        
+        // Verify the update was successful by reading the document again
+        final updatedDoc = await userRef.get();
+        if (updatedDoc.exists) {
+          final updatedData = updatedDoc.data();
+          print('Updated user data: $updatedData');
+          if (profileImageUrl != null && updatedData?['profileImageUrl'] != profileImageUrl) {
+            print('Warning: Profile image URL in database does not match the one we tried to save.');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error updating user profile: $e');
+      rethrow;
+    }
   }
 }

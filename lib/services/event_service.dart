@@ -1,10 +1,20 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/models/event.dart';
 import 'package:health/services/auth_service.dart';
+import 'package:health/services/cloudinary_service.dart';
 
 class EventService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final CollectionReference _eventsCollection = _firestore.collection('events');
+  
+  // Instance-level method to get events for use in EventListPage
+  Future<List<Event>> getEvents() async {
+    final snapshot = await _eventsCollection.orderBy('date', descending: false).get();
+    return snapshot.docs.map((doc) {
+      return Event.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+    }).toList();
+  }
   
   // Get all events
   static Stream<List<Event>> getAllEvents() {
@@ -32,13 +42,14 @@ class EventService {
   }
   
   // Create a new event
-  static Future<void> createEvent({
+  static Future<String> createEvent({
     required String title,
     required String description,
     required DateTime date,
     required String location,
     required bool isFormal,
     String? sponsorship,
+    File? imageFile, // Optional image file
   }) async {
     final user = AuthService.currentUser;
     if (user == null) {
@@ -53,8 +64,8 @@ class EventService {
       }
     }
     
-    // Create the event
-    await _eventsCollection.add({
+    // First, create the event without an image
+    final docRef = await _eventsCollection.add({
       'title': title,
       'description': description,
       'date': Timestamp.fromDate(date),
@@ -64,7 +75,26 @@ class EventService {
       'sponsorship': isFormal ? sponsorship : null,
       'participants': [user.uid],  // Creator is automatically a participant
       'createdAt': FieldValue.serverTimestamp(),
+      'imageUrl': null, // Initially no image
     });
+    
+    // If an image was provided, upload it to Cloudinary and update the event
+    if (imageFile != null) {
+      try {
+        // Upload to Cloudinary
+        final imageUrl = await CloudinaryService.uploadEventImage(imageFile, docRef.id);
+        
+        // Update the event with the image URL
+        if (imageUrl != null) {
+          await docRef.update({'imageUrl': imageUrl});
+        }
+      } catch (e) {
+        print('Error uploading event image: $e');
+        // The event is still created even if the image upload fails
+      }
+    }
+    
+    return docRef.id; // Return the event ID
   }
   
   // Join an event

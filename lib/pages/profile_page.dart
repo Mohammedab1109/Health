@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/services/auth_service.dart';
+import 'package:health/services/cloudinary_service.dart';
 import 'package:health/theme/app_theme.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -60,32 +62,63 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     }
   }
+  
+  Future<void> _uploadProfileImage() async {
+    try {
+      // Show image picker dialog
+      final imageFile = await CloudinaryService.showImagePickerDialog(context);
+      if (imageFile == null) return;
+      
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Display loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Uploading profile image...'), duration: Duration(seconds: 2)),
+      );
+
+      // Upload image to Cloudinary
+      final profileImageUrl = await CloudinaryService.uploadProfileImage(
+        imageFile,
+        AuthService.currentUser!.uid,
+      );
+      
+      if (profileImageUrl != null) {
+        // Update Firestore with the new image URL
+        await AuthService.updateUserProfile(profileImageUrl: profileImageUrl);
+        
+        // Reload user data to show updated image
+        await _loadUserData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile image updated successfully')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading profile image: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () {
-              // TODO: Navigate to edit profile page
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Edit profile functionality coming soon!'),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage.isNotEmpty
-              ? Center(child: Text(_errorMessage, style: const TextStyle(color: AppColors.errorRed)))
-              : _buildProfileContent(),
-    );
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _errorMessage.isNotEmpty
+            ? Center(child: Text(_errorMessage, style: const TextStyle(color: AppColors.errorRed)))
+            : _buildProfileContent();
   }
 
   Widget _buildProfileContent() {
@@ -151,15 +184,41 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ],
                       ),
-                      child: CircleAvatar(
-                        radius: 55,
-                        backgroundColor: AppColors.energeticOrange,
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            fontSize: 40, 
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                      child: GestureDetector(
+                        onTap: () => _uploadProfileImage(),
+                        child: CircleAvatar(
+                          radius: 55,
+                          backgroundColor: AppColors.energeticOrange,
+                          backgroundImage: _userData?['profileImageUrl'] != null && 
+                                          _userData!['profileImageUrl'].isNotEmpty
+                              ? NetworkImage(_userData!['profileImageUrl'])
+                              : null,
+                          child: Stack(
+                            children: [
+                              if (_userData?['profileImageUrl'] == null || 
+                                 _userData!['profileImageUrl'].isEmpty)
+                                Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    fontSize: 40, 
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: AppColors.primaryBlue,
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
