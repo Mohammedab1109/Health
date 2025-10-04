@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/services/event_service.dart';
+import 'package:health/services/auth_service.dart';
+import 'package:health/models/sport_event.dart';
 import 'package:health/widgets/image_uploader.dart';
 import 'package:health/widgets/loading_indicator.dart';
 
@@ -19,6 +22,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
   final _descriptionController = TextEditingController();
   final _locationController = TextEditingController();
   final _sponsorshipController = TextEditingController();
+  final _eventService = EventService();
   
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   File? _selectedImage;
@@ -42,15 +46,29 @@ class _CreateEventPageState extends State<CreateEventPage> {
       });
 
       try {
-        await EventService.createEvent(
+        final user = AuthService.currentUser;
+        if (user == null) {
+          throw Exception('User must be logged in to create an event');
+        }
+
+        final event = SportEvent(
+          id: '', // This will be set by Firestore
           title: _titleController.text,
           description: _descriptionController.text,
-          date: _selectedDate,
-          location: _locationController.text,
-          isFormal: widget.isAdmin, // Only admins can create formal events
-          sponsorship: widget.isAdmin ? _sponsorshipController.text : null,
-          imageFile: _selectedImage,
+          creatorId: user.uid,
+          sportType: SportType.other, // TODO: Add sport type selection
+          startTime: _selectedDate,
+          endTime: _selectedDate.add(const Duration(hours: 1)), // Default 1 hour duration
+          location: const GeoPoint(0, 0), // TODO: Add location picker
+          locationName: _locationController.text,
+          maxParticipants: 10, // TODO: Add max participants field
+          difficultyLevel: 'beginner', // TODO: Add difficulty level selection
+          status: EventStatus.upcoming,
+          participantIds: [user.uid], // Creator is automatically a participant
+          settings: {},
         );
+
+        await _eventService.createEvent(event);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

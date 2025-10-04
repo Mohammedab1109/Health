@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:health/services/event_service.dart';
-import 'package:health/models/event.dart';
+import 'package:health/models/sport_event.dart';
 import 'package:health/theme/app_theme.dart';
 import 'package:health/widgets/loading_indicator.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 class EventListPage extends StatefulWidget {
   const EventListPage({Key? key}) : super(key: key);
@@ -14,13 +13,6 @@ class EventListPage extends StatefulWidget {
 
 class _EventListPageState extends State<EventListPage> {
   final EventService _eventService = EventService();
-  late Future<List<Event>> _eventsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _eventsFuture = _eventService.getEvents();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +25,8 @@ class _EventListPageState extends State<EventListPage> {
         backgroundColor: AppColors.vibrantTeal,
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<List<Event>>(
-        future: _eventsFuture,
+      body: StreamBuilder<List<SportEvent>>(
+        stream: _eventService.getUpcomingEvents(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: LoadingIndicator());
@@ -52,7 +44,7 @@ class _EventListPageState extends State<EventListPage> {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(
               child: Text(
-                'No events found. Create a new event!',
+                'No upcoming events found. Create a new event!',
                 style: TextStyle(fontSize: 18),
               ),
             );
@@ -72,7 +64,7 @@ class _EventListPageState extends State<EventListPage> {
 }
 
 class EventCard extends StatelessWidget {
-  final Event event;
+  final SportEvent event;
 
   const EventCard({Key? key, required this.event}) : super(key: key);
 
@@ -87,26 +79,20 @@ class EventCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (event.imageUrl != null && event.imageUrl!.isNotEmpty)
-            ClipRRect(
+          // Sport type icon or image could be added here
+          Container(
+            height: 100,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.vibrantTeal.withOpacity(0.1),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: CachedNetworkImage(
-                imageUrl: event.imageUrl!,
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 200,
-                  color: Colors.grey[300],
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  height: 200,
-                  color: Colors.grey[300],
-                  child: const Center(child: Icon(Icons.error)),
-                ),
-              ),
             ),
+            child: Icon(
+              _getSportIcon(event.sportType),
+              size: 48,
+              color: AppColors.vibrantTeal,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -130,7 +116,7 @@ class EventCard extends StatelessWidget {
                     const Icon(Icons.calendar_today, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      _formatDate(event.date),
+                      _formatDate(event.startTime),
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
@@ -140,7 +126,21 @@ class EventCard extends StatelessWidget {
                     const Icon(Icons.location_on, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      event.location,
+                      event.locationName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(_getDifficultyIcon(event.difficultyLevel), size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${event.difficultyLevel} · ${event.participantIds.length}/${event.maxParticipants} participants',
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
@@ -158,5 +158,43 @@ class EventCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  IconData _getSportIcon(SportType type) {
+    switch (type) {
+      case SportType.walking:
+        return Icons.directions_walk;
+      case SportType.running:
+        return Icons.directions_run;
+      case SportType.cycling:
+        return Icons.directions_bike;
+      case SportType.swimming:
+        return Icons.pool;
+      case SportType.hiking:
+        return Icons.landscape;
+      case SportType.yoga:
+        return Icons.self_improvement;
+      case SportType.basketball:
+        return Icons.sports_basketball;
+      case SportType.football:
+        return Icons.sports_soccer;
+      case SportType.tennis:
+        return Icons.sports_tennis;
+      case SportType.other:
+        return Icons.sports;
+    }
+  }
+
+  IconData _getDifficultyIcon(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'beginner':
+        return Icons.star_border;
+      case 'intermediate':
+        return Icons.star_half;
+      case 'advanced':
+        return Icons.star;
+      default:
+        return Icons.star_border;
+    }
   }
 }

@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Events collection rules
+    match /events/{eventId} {
+      function isEventCreator() {
+        return isSignedIn() && resource.data.creatorId == request.auth.uid;
+      }
+      
+      function isEventParticipant() {
+        return isSignedIn() && request.auth.uid in resource.data.participantIds;
+      }
+      
+      function isValidEvent() {
+        let hasRequiredFields = request.resource.data.keys().hasAll([
+          'title', 'description', 'creatorId', 'sportType', 'startTime', 
+          'endTime', 'location', 'locationName', 'maxParticipants', 
+          'difficultyLevel', 'status', 'participantIds'
+        ]);
+        
+        let isValidDates = request.resource.data.startTime < request.resource.data.endTime;
+        let isValidParticipants = request.resource.data.maxParticipants > 0;
+        
+        return hasRequiredFields && isValidDates && isValidParticipants;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidEvent() && request.resource.data.creatorId == request.auth.uid;
+      allow update: if isEventCreator() || 
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantIds']));
+      allow delete: if isEventCreator();
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+  }
+}

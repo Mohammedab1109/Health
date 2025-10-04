@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:health/pages/sign_in_page.dart';
-import 'package:health/pages/test_image_upload_page.dart';
 import 'package:health/services/auth_service.dart';
 import 'package:health/widgets/loading_indicator.dart';
 import 'package:health/theme/app_theme.dart';

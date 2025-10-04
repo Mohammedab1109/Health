@@ -1,148 +1,128 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:health/models/event.dart';
-import 'package:health/services/auth_service.dart';
-import 'package:health/services/cloudinary_service.dart';
+import 'package:health/models/sport_event.dart';
 
 class EventService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final CollectionReference _eventsCollection = _firestore.collection('events');
-  
-  // Instance-level method to get events for use in EventListPage
-  Future<List<Event>> getEvents() async {
-    final snapshot = await _eventsCollection.orderBy('date', descending: false).get();
+  final CollectionReference _eventsCollection = FirebaseFirestore.instance.collection('events');
+
+  // Get upcoming events
+  Stream<List<SportEvent>> getUpcomingEvents() {
+    print('Querying upcoming events with status: ${EventStatus.upcoming.name}');
+    print('Current time for query: ${DateTime.now()}');
+    return _eventsCollection
+        .where('startTime', isGreaterThan: Timestamp.fromDate(DateTime.now()))
+        .snapshots()
+        .map((snapshot) {
+          print('Received snapshot with ${snapshot.docs.length} documents');
+          final events = _convertToSportEvents(snapshot);
+          // Filter for upcoming status in memory
+          return events.where((event) => event.status == EventStatus.upcoming).toList();
+        });
+  }
+
+  // Get events created by a specific user
+  Stream<List<SportEvent>> getUserEvents(String userId) {
+    return _eventsCollection
+        .where('creatorId', isEqualTo: userId)
+        .orderBy('startTime')
+        .snapshots()
+        .map(_convertToSportEvents);
+  }
+
+  // Get events where a specific user is participating
+  Stream<List<SportEvent>> getUserParticipatingEvents(String userId) {
+    return _eventsCollection
+        .where('participantIds', arrayContains: userId)
+        .where('creatorId', isNotEqualTo: userId)
+        .orderBy('creatorId')
+        .orderBy('startTime')
+        .snapshots()
+        .map(_convertToSportEvents);
+  }
+
+  // Convert Firestore documents to SportEvent objects
+  List<SportEvent> _convertToSportEvents(QuerySnapshot snapshot) {
     return snapshot.docs.map((doc) {
-      return Event.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+      final data = doc.data() as Map<String, dynamic>;
+      return SportEvent(
+        id: doc.id,
+        title: data['title'] as String,
+        description: data['description'] as String,
+        creatorId: data['creatorId'] as String,
+        sportType: SportType.values.firstWhere(
+          (type) => type.name == data['sportType'],
+          orElse: () => SportType.other,
+        ),
+        startTime: (data['startTime'] as Timestamp).toDate(),
+        endTime: (data['endTime'] as Timestamp).toDate(),
+        location: data['location'] as GeoPoint,
+        locationName: data['locationName'] as String,
+        maxParticipants: data['maxParticipants'] as int,
+        difficultyLevel: data['difficultyLevel'] as String,
+        status: EventStatus.values.firstWhere(
+          (status) => status.name == data['status'],
+          orElse: () => EventStatus.upcoming,
+        ),
+        participantIds: List<String>.from(data['participantIds'] as List),
+        settings: Map<String, dynamic>.from(data['settings'] ?? {}),
+      );
     }).toList();
   }
-  
-  // Get all events
-  static Stream<List<Event>> getAllEvents() {
-    return _eventsCollection
-        .orderBy('date', descending: false)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            return Event.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-          }).toList();
-        });
-  }
-  
-  // Get events by type (formal or regular)
-  static Stream<List<Event>> getEventsByType(bool isFormal) {
-    return _eventsCollection
-        .where('isFormal', isEqualTo: isFormal)
-        .orderBy('date', descending: false)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            return Event.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-          }).toList();
-        });
-  }
-  
+
   // Create a new event
-  static Future<String> createEvent({
-    required String title,
-    required String description,
-    required DateTime date,
-    required String location,
-    required bool isFormal,
-    String? sponsorship,
-    File? imageFile, // Optional image file
-  }) async {
-    final user = AuthService.currentUser;
-    if (user == null) {
-      throw Exception('User must be logged in to create an event');
-    }
-    
-    // Check if user is admin when creating formal events
-    if (isFormal) {
-      final isAdmin = await AuthService.isCurrentUserAdmin();
-      if (!isAdmin) {
-        throw Exception('Only admins can create formal events');
-      }
-    }
-    
-    // First, create the event without an image
+  Future<String> createEvent(SportEvent event) async {
     final docRef = await _eventsCollection.add({
-      'title': title,
-      'description': description,
-      'date': Timestamp.fromDate(date),
-      'location': location,
-      'createdBy': user.uid,
-      'isFormal': isFormal,
-      'sponsorship': isFormal ? sponsorship : null,
-      'participants': [user.uid],  // Creator is automatically a participant
+      'title': event.title,
+      'description': event.description,
+      'creatorId': event.creatorId,
+      'sportType': event.sportType.name,
+      'startTime': Timestamp.fromDate(event.startTime),
+      'endTime': Timestamp.fromDate(event.endTime),
+      'location': event.location,
+      'locationName': event.locationName,
+      'maxParticipants': event.maxParticipants,
+      'difficultyLevel': event.difficultyLevel,
+      'status': event.status.name,
+      'participantIds': event.participantIds,
+      'settings': event.settings,
       'createdAt': FieldValue.serverTimestamp(),
-      'imageUrl': null, // Initially no image
     });
-    
-    // If an image was provided, upload it to Cloudinary and update the event
-    if (imageFile != null) {
-      try {
-        // Upload to Cloudinary
-        final imageUrl = await CloudinaryService.uploadEventImage(imageFile, docRef.id);
-        
-        // Update the event with the image URL
-        if (imageUrl != null) {
-          await docRef.update({'imageUrl': imageUrl});
-        }
-      } catch (e) {
-        print('Error uploading event image: $e');
-        // The event is still created even if the image upload fails
-      }
-    }
-    
-    return docRef.id; // Return the event ID
+    return docRef.id;
   }
-  
+
+  // Update an existing event
+  Future<void> updateEvent(SportEvent event) async {
+    await _eventsCollection.doc(event.id).update({
+      'title': event.title,
+      'description': event.description,
+      'sportType': event.sportType.name,
+      'startTime': Timestamp.fromDate(event.startTime),
+      'endTime': Timestamp.fromDate(event.endTime),
+      'location': event.location,
+      'locationName': event.locationName,
+      'maxParticipants': event.maxParticipants,
+      'difficultyLevel': event.difficultyLevel,
+      'status': event.status.name,
+      'settings': event.settings,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   // Join an event
-  static Future<void> joinEvent(String eventId) async {
-    final user = AuthService.currentUser;
-    if (user == null) {
-      throw Exception('User must be logged in to join an event');
-    }
-    
+  Future<void> joinEvent(String eventId, String userId) async {
     await _eventsCollection.doc(eventId).update({
-      'participants': FieldValue.arrayUnion([user.uid]),
+      'participantIds': FieldValue.arrayUnion([userId]),
     });
   }
-  
+
   // Leave an event
-  static Future<void> leaveEvent(String eventId) async {
-    final user = AuthService.currentUser;
-    if (user == null) {
-      throw Exception('User must be logged in to leave an event');
-    }
-    
+  Future<void> leaveEvent(String eventId, String userId) async {
     await _eventsCollection.doc(eventId).update({
-      'participants': FieldValue.arrayRemove([user.uid]),
+      'participantIds': FieldValue.arrayRemove([userId]),
     });
   }
-  
-  // Delete an event (only creator or admin can delete)
-  static Future<void> deleteEvent(String eventId) async {
-    final user = AuthService.currentUser;
-    if (user == null) {
-      throw Exception('User must be logged in to delete an event');
-    }
-    
-    // Get the event
-    final eventDoc = await _eventsCollection.doc(eventId).get();
-    if (!eventDoc.exists) {
-      throw Exception('Event not found');
-    }
-    
-    final eventData = eventDoc.data() as Map<String, dynamic>;
-    final String createdBy = eventData['createdBy'];
-    
-    // Check if user is creator or admin
-    final bool isAdmin = await AuthService.isCurrentUserAdmin();
-    if (user.uid != createdBy && !isAdmin) {
-      throw Exception('Only the creator or admin can delete an event');
-    }
-    
+
+  // Delete an event
+  Future<void> deleteEvent(String eventId) async {
     await _eventsCollection.doc(eventId).delete();
   }
 }
